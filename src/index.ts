@@ -5,9 +5,10 @@ import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import { URLSearchParams } from 'url';
 import mongoose from 'mongoose';
+import path from 'path';
 import dotenv from 'dotenv';
 
-require('dotenv').config()
+dotenv.config();
 
 declare module 'express-session' {
   interface SessionData {
@@ -23,6 +24,17 @@ const apiSecret = process.env.SHOPIFY_API_SECRET;
 if (!apiKey || !apiSecret) {
   throw new Error('SHOPIFY_API_KEY and SHOPIFY_API_SECRET must be set');
 }
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+app.use(session({
+  secret: 'your_session_secret',
+  resave: false,
+  saveUninitialized: true,
+}));
+app.use(express.static(path.join(__dirname, 'public')));
+
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/shopify_app')
   .then(() => console.log('Connected to MongoDB'))
@@ -36,15 +48,21 @@ const shopSchema = new mongoose.Schema({
 const Shop = mongoose.model('Shop', shopSchema);
 
 
-const scopes = 'write_products,read_customers,write_orders';
-const forwardingAddress = 'https://50b9-115-96-111-209.ngrok-free.app'; // our ngrok url
+const scopes = 'write_products,read_customers,write_customers,read_orders,write_orders,read_price_rules,read_discounts,write_discounts,read_themes,write_themes,read_script_tags,write_script_tags,read_content,write_content';
+const forwardingAddress = 'https://916d-115-96-153-0.ngrok-free.app'; // our ngrok url
 
-app.use(cookieParser());
-app.use(session({
-  secret: 'your_session_secret',
-  resave: false,
-  saveUninitialized: true,
-}));
+
+// Add this route
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+app.get('/dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+});
+
+app.get('/catalog', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'catalog.html'));
+});
 
 app.get('/shopify', (req, res) => {
   const shop = req.query.shop as string;
@@ -124,6 +142,142 @@ async function storeAccessToken(shop: string, accessToken: string) {
     throw error;
   }
 }
+
+app.get('/shop-info', async (req, res) => {
+  const { shop } = req.query;
+  if (!shop) {
+    return res.status(400).send('Missing shop parameter');
+  }
+
+  try {
+    const shopData = await Shop.findOne({ shop });
+    if (!shopData) {
+      return res.status(404).send('Shop not found');
+    }
+
+    const shopInfoUrl = `https://${shop}/admin/api/2023-07/shop.json`;
+    const response = await axios.get(shopInfoUrl, {
+      headers: {
+        'X-Shopify-Access-Token': shopData.accessToken
+      }
+    });
+
+    res.json(response.data.shop);
+  } catch (error) {
+    console.error('Error fetching shop info:', error);
+    res.status(500).send('Error fetching shop info');
+  }
+});
+
+app.post('/api/create-checkout', async (req, res) => {
+  const { shop, items, address } = req.body;
+  try {
+    const shopData = await Shop.findOne({ shop });
+    if (!shopData) {
+      return res.status(404).send('Shop not found');
+    }
+
+    const storefrontAccessToken = shopData.accessToken; // You'll need to store this when setting up the app
+    
+    const createCartMutation = `
+      mutation createCart($input: CartInput!) {
+        cartCreate(input: $input) {
+          cart {
+            checkoutUrl
+          }
+        }
+      }
+    `;
+
+    const variables = {
+      input: {
+        lines: items.map((item: { quantity: number; variant_id: string }) => ({
+          quantity: item.quantity,
+          merchandiseId: item.variant_id
+        }))
+      }
+    };
+
+    const response = await axios.post(`https://${shop}/api/2023-07/graphql.json`, {
+      query: createCartMutation,
+      variables
+    }, {
+      headers: {
+        'X-Shopify-Storefront-Access-Token': storefrontAccessToken,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const checkoutUrl = response.data.data.cartCreate.cart.checkoutUrl;
+    res.json({ checkoutUrl });
+  } catch (error) {
+    console.error('Error creating checkout:', error);
+    res.status(500).send('Error creating checkout');
+  }
+});
+
+app.get('/products', async (req, res) => {
+  const { shop } = req.query;
+  if (!shop) {
+    return res.status(400).send('Missing shop parameter');
+  }
+
+  try {
+    const shopData = await Shop.findOne({ shop });
+    if (!shopData) {
+      return res.status(404).send('Shop not found');
+    }
+
+    const productsUrl = `https://${shop}/admin/api/2023-07/products.json`;
+    const response = await axios.get(productsUrl, {
+      headers: {
+        'X-Shopify-Access-Token': shopData.accessToken
+      }
+    });
+
+    res.json(response.data.products);
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    res.status(500).send('Error fetching products');
+  }
+});
+
+// New route to add a product
+app.post('/products', async (req, res) => {
+  const { shop } = req.query;
+  const productData = req.body;
+
+  if (!shop) {
+    return res.status(400).send('Missing shop parameter');
+  }
+
+  if (!productData) {
+    return res.status(400).send('Missing product data');
+  }
+
+  try {
+    const shopData = await Shop.findOne({ shop });
+    if (!shopData) {
+      return res.status(404).send('Shop not found');
+    }
+
+    const productsUrl = `https://${shop}/admin/api/2023-07/products.json`;
+    const response = await axios.post(productsUrl, 
+      { product: productData },
+      {
+        headers: {
+          'X-Shopify-Access-Token': shopData.accessToken,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    res.status(201).json(response.data.product);
+  } catch (error) {
+    console.error('Error adding product:', error);
+    res.status(500).send('Error adding product');
+  }
+});
 
 
 app.listen(PORT, () => {

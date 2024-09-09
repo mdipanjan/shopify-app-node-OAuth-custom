@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shopify Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        button { margin: 10px 0; }
+        #productList { list-style-type: none; padding: 0; }
+        #productList li { margin-bottom: 10px; }
+        #shopInfo { background-color: #f0f0f0; padding: 15px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Shopify Dashboard</h1>
+    
+    <div id="shopInfo"></div>
+
+    <h2>Products</h2>
+    <button onclick="fetchProducts()">Fetch Products</button>
+    <ul id="productList"></ul>
+
+    <h2>Add New Product</h2>
+    <input type="text" id="productTitle" placeholder="Product Title">
+    <input type="text" id="productPrice" placeholder="Product Price">
+    <button onclick="addProduct()">Add Product</button>
+
+    <script>
+        const shop = 'email-test-v0-strore.myshopify.com'; // Replace with actual shop URL
+
+        function fetchShopInfo() {
+            fetch(`/shop-info?shop=${shop}`)
+                .then(response => response.json())
+                .then(info => {
+                    const infoDiv = document.getElementById('shopInfo');
+                    infoDiv.innerHTML = `
+                        <h3>${info.name}</h3>
+                        <p>Email: ${info.email}</p>
+                        <p>Country: ${info.country_name}</p>
+                        <p>Plan: ${info.plan_name}</p>
+                    `;
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        function fetchProducts() {
+            fetch(`/products?shop=${shop}`)
+                .then(response => response.json())
+                .then(products => {
+                    const list = document.getElementById('productList');
+                    list.innerHTML = '';
+                    products.forEach(product => {
+                        const li = document.createElement('li');
+                        li.textContent = `${product.title} - $${product.variants[0].price}`;
+                        list.appendChild(li);
+                    });
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        function addProduct() {
+            const title = document.getElementById('productTitle').value;
+            const price = document.getElementById('productPrice').value;
+            fetch(`/products?shop=${shop}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    title: title,
+                    variants: [{ price: price }]
+                })
+            })
+            .then(response => response.json())
+            .then(product => {
+                console.log('Product added:', product);
+                fetchProducts();  // Refresh the product list
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        // Fetch shop info when page loads
+        fetchShopInfo();
+    </script>
+</body>
+</html>

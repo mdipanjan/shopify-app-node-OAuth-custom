@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shopify App</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        button { margin: 10px 0; }
+        #productList { list-style-type: none; padding: 0; }
+        #productList li { margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Shopify App</h1>
+    
+    <div id="shopForm">
+        <input type="text" id="shopInput" placeholder="your-shop.myshopify.com">
+        <button onclick="installApp()">Install App</button>
+    </div>
+
+    <div id="appContent" style="display: none;">
+        <button onclick="fetchProducts()">Fetch Products</button>
+        <ul id="productList"></ul>
+
+        <h2>Add New Product</h2>
+        <input type="text" id="productTitle" placeholder="Product Title">
+        <input type="text" id="productPrice" placeholder="Product Price">
+        <button onclick="addProduct()">Add Product</button>
+    </div>
+
+    <script>
+        let currentShop = '';
+
+        function installApp() {
+            const shop = document.getElementById('shopInput').value;
+            if (shop) {
+                window.location.href = `/shopify?shop=${shop}`;
+            }
+        }
+
+        function fetchProducts() {
+            fetch(`/products?shop=${currentShop}`)
+                .then(response => response.json())
+                .then(products => {
+                    const list = document.getElementById('productList');
+                    list.innerHTML = '';
+                    products.forEach(product => {
+                        const li = document.createElement('li');
+                        li.textContent = `${product.title} - $${product.variants[0].price}`;
+                        list.appendChild(li);
+                    });
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        function addProduct() {
+            const title = document.getElementById('productTitle').value;
+            const price = document.getElementById('productPrice').value;
+            fetch(`/products?shop=${currentShop}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    title: title,
+                    variants: [{ price: price }]
+                })
+            })
+            .then(response => response.json())
+            .then(product => {
+                console.log('Product added:', product);
+                fetchProducts();  // Refresh the product list
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        // Check if we're returning from OAuth
+        const urlParams = new URLSearchParams(window.location.search);
+        const shop = urlParams.get('shop');
+        if (shop) {
+            currentShop = shop;
+            document.getElementById('shopForm').style.display = 'none';
+            document.getElementById('appContent').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
