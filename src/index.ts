@@ -48,8 +48,8 @@ const shopSchema = new mongoose.Schema({
 const Shop = mongoose.model('Shop', shopSchema);
 
 
-const scopes = 'write_products,read_customers,write_customers,read_orders,write_orders,read_price_rules,read_discounts,write_discounts,read_themes,write_themes,read_script_tags,write_script_tags,read_content,write_content';
-const forwardingAddress = 'https://916d-115-96-153-0.ngrok-free.app'; // our ngrok url
+const scopes = 'read_products,write_products,unauthenticated_read_content,unauthenticated_read_customer_tags,unauthenticated_read_product_tags,unauthenticated_read_product_listings,unauthenticated_write_checkouts,unauthenticated_read_checkouts,unauthenticated_write_customers,unauthenticated_read_customers';
+const forwardingAddress = 'https://77e5-115-96-153-0.ngrok-free.app'; // our ngrok url
 
 
 // Add this route
@@ -110,16 +110,20 @@ app.get('/shopify/callback', async (req, res) => {
       const accessTokenResponse = await axios.post(accessTokenRequestUrl, accessTokenPayload);
       const accessToken = accessTokenResponse.data.access_token;
 
-            // Store the access token in MongoDB
-            await storeAccessToken(shop as string, accessToken);
+      // Store the access token in MongoDB
+      await storeAccessToken(shop as string, accessToken);
 
       const shopRequestUrl = `https://${shop}/admin/shop.json`;
       const shopRequestHeaders = {
         'X-Shopify-Access-Token': accessToken,
       };
+          // Redirect to a page where the user can choose to generate a Storefront token
+    res.redirect(`/generate-storefront-token?shop=${shop}`);
 
-      const shopResponse = await axios.get(shopRequestUrl, { headers: shopRequestHeaders });
-      res.status(200).json(shopResponse.data);
+
+      // const shopResponse = await axios.get(shopRequestUrl, { headers: shopRequestHeaders });
+      // res.status(200).json(shopResponse.data);
+
     } catch (error) {
       console.error('Error:', error);
       res.status(500).send('An error occurred during the OAuth process');
@@ -128,6 +132,70 @@ app.get('/shopify/callback', async (req, res) => {
     res.status(400).send('Required parameters missing');
   }
 });
+app.get('/generate-storefront-token', async (req, res) => {
+  const { shop } = req.query;
+  
+  // Render a page with a button to generate the token
+  res.send(`
+    <h1>Generate Storefront Access Token</h1>
+    <p>Click the button below to generate a Storefront Access Token for ${shop}</p>
+    <form method="POST" action="/create-storefront-token">
+      <input type="hidden" name="shop" value="${shop}">
+      <button type="submit">Generate Token</button>
+    </form>
+  `);
+});
+
+app.post('/create-storefront-token', async (req, res) => {
+  const { shop } = req.body;
+  
+  try {
+    const shopData = await Shop.findOne({ shop });
+    if (!shopData) {
+      return res.status(404).send('Shop not found');
+    }
+
+    const storefrontToken = await createStorefrontAccessToken(shop, shopData.accessToken);
+    
+    // Store the Storefront Access Token
+    await storeStorefrontToken(shop, storefrontToken.access_token);
+
+    res.send('Storefront Access Token generated successfully!');
+  } catch (error) {
+    console.error('Error generating Storefront Access Token:', error);
+    res.status(500).send('Error generating Storefront Access Token');
+  }
+});
+async function storeStorefrontToken(shop: string, storefrontToken: string) {
+  await Shop.findOneAndUpdate(
+    { shop },
+    { storefrontAccessToken: storefrontToken },
+    { new: true }
+  );
+}
+
+
+async function createStorefrontAccessToken(shop: string, accessToken: string  ) {
+  const url = `https://${shop}/admin/api/2024-07/storefront_access_tokens.json`;
+  const headers = {
+    'X-Shopify-Access-Token': accessToken,
+    'Content-Type': 'application/json'
+  };
+  const data = {
+    storefront_access_token: {
+      title: "Your App Name Storefront Token"
+    }
+  };
+
+  try {
+    const response = await axios.post(url, data, { headers });
+    return response.data.storefront_access_token;
+  } catch (error) {
+    console.error('Error creating Storefront Access Token:', error);
+    throw error;
+  }
+}
+
 
 async function storeAccessToken(shop: string, accessToken: string) {
   try {
