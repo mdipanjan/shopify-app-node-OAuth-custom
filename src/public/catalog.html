@@ -1,117 +1,272 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shopify Store</title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
-        .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
-        .product-card { border: 1px solid #ddd; padding: 10px; text-align: center; }
-        .product-card img { max-width: 100%; height: auto; }
-        #cart { float: right; width: 300px; border: 1px solid #ddd; padding: 10px; }
-        #checkout-form { margin-top: 20px; }
-        .checkout-btn { background-color: #f60; color: white; border: none; padding: 10px 20px; cursor: pointer; }
-    </style>
-</head>
-<body>
-    <h1>Shopify Store</h1>
-    <div id="cart">
-        <h2>Cart</h2>
-        <ul id="cart-items"></ul>
-        <p>Total: <span id="cart-total">$0.00</span></p>
-        <button onclick="proceedToCheckout()" class="checkout-btn">Proceed to Checkout</button>
-    </div>
-    <div id="product-catalog" class="product-grid"></div>
-    <div id="checkout-form" style="display:none;">
-        <h2>Delivery Address</h2>
-        <form id="address-form">
-            <input type="text" id="name" placeholder="Full Name" required>
-            <input type="text" id="address1" placeholder="Address Line 1" required>
-            <input type="text" id="city" placeholder="City" required>
-            <input type="text" id="province" placeholder="State/Province" required>
-            <input type="text" id="country" placeholder="Country" required>
-            <input type="text" id="zip" placeholder="Zip/Postal Code" required>
-            <input type="tel" id="phone" placeholder="Phone Number" required>
-            <button type="submit" class="checkout-btn">Complete Checkout</button>
-        </form>
-    </div>
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Shopify Store</title>
+		<style>
+			body {
+				font-family: Arial, sans-serif;
+				max-width: 1200px;
+				margin: 0 auto;
+				padding: 20px;
+			}
+			.product-grid {
+				display: grid;
+				grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+				gap: 20px;
+			}
+			.product-card {
+				border: 1px solid #ddd;
+				padding: 15px;
+				margin-bottom: 20px;
+			}
 
-    <script>
-        const shop = 'email-test-v0-strore.myshopify.com'; // Replace with actual shop URL
-        let cart = [];
+			.product-options {
+				margin-top: 10px;
+			}
 
-        async function fetchProducts() {
-            const response = await fetch(`/products?shop=${shop}`);
-            const products = await response.json();
-            const catalog = document.getElementById('product-catalog');
-            catalog.innerHTML = products.map(product => `
-                <div class="product-card">
-                    <img src="${product.images[0]?.src || ''}" alt="${product.title}">
-                    <h3>${product.title}</h3>
-                    <p>$${product.variants[0].price}</p>
-                    <button onclick="addToCart('${product.variants[0].id}', '${product.title}', ${product.variants[0].price})">Add to Cart</button>
+			.option {
+				margin-bottom: 10px;
+			}
+
+			.option label {
+				display: block;
+				margin-bottom: 5px;
+			}
+
+			.option select {
+				width: 100%;
+				padding: 5px;
+			}
+
+			.product-card img {
+				max-width: 100%;
+				height: auto;
+			}
+			#cart {
+				float: right;
+				width: 300px;
+				border: 1px solid #ddd;
+				padding: 10px;
+			}
+			#checkout-form {
+				margin-top: 20px;
+			}
+			.checkout-btn {
+				background-color: #f60;
+				color: white;
+				border: none;
+				padding: 10px 20px;
+				cursor: pointer;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>Shopify Store</h1>
+		<div id="cart">
+			<h2>Cart</h2>
+			<ul id="cart-items"></ul>
+			<p>Total: <span id="cart-total">$0.00</span></p>
+			<button onclick="proceedToCheckout()" class="checkout-btn">Proceed to Checkout</button>
+		</div>
+		<div id="product-catalog" class="product-grid"></div>
+		<div id="checkout-form" style="display: none">
+			<h2>Delivery Address</h2>
+			<form id="address-form">
+				<input type="text" id="firstName" placeholder="First Name" required />
+				<input type="text" id="lastName" placeholder="Last Name" required />
+				<input type="text" id="address1" placeholder="Address Line 1" required />
+				<input type="text" id="city" placeholder="City" required />
+				<input type="text" id="province" placeholder="State/Province" required />
+				<input type="text" id="country" placeholder="Country" required />
+				<input type="text" id="zip" placeholder="Zip/Postal Code" required />
+				<input type="tel" id="phone" placeholder="Phone Number" required />
+				<button type="submit" class="checkout-btn">Complete Checkout</button>
+			</form>
+		</div>
+
+		<script>
+			let cart = [];
+			let selectedOptions = {};
+			const shop = 'email-test-v0-strore.myshopify.com';
+			let products = []; // Add this line
+
+			async function fetchProducts() {
+				const response = await fetch(`/products?shop=${shop}`);
+				products = await response.json();
+				console.log('Fetched products:', products);
+
+				const catalog = document.getElementById('product-catalog');
+				catalog.innerHTML = products
+					.map(product => {
+						console.log('Rendering product:', product.id, product.title);
+						return `
+            <div class="product-card">
+                <img src="${product.images[0]?.src || ''}" alt="${product.title}">
+                <h3>${product.title}</h3>
+                <p>$${product.variants[0].price}</p>
+                <div class="product-options">
+                    ${renderProductOptions(product)}
                 </div>
-            `).join('');
-        }
+                <button onclick="addToCart('${product.id}')">Add to Cart</button>
+            </div>
+        `;
+					})
+					.join('');
+			}
+			function renderProductOptions(product) {
+				let optionsHTML = '';
 
-        function addToCart(id, title, price) {
-            const existingItem = cart.find(item => item.id === id);
-            if (existingItem) {
-                existingItem.quantity += 1;
-            } else {
-                cart.push({ id, title, price, quantity: 1 });
-            }
-            updateCartDisplay();
-        }
+				if (product.options) {
+					product.options.forEach(option => {
+						optionsHTML += `
+                        <div class="option">
+                        <label>${option.name}</label>
+                        <select onchange="updateProductSelection('${product.id}', '${
+							option.name
+						}', this.value)">
+                            ${option.values
+															.map(value => `<option value="${value}">${value}</option>`)
+															.join('')}
+                        </select>
+                        </div>
+                    `;
+					});
+				}
 
-        function updateCartDisplay() {
-            const cartList = document.getElementById('cart-items');
-            const cartTotal = document.getElementById('cart-total');
-            cartList.innerHTML = cart.map(item => `
-                <li>${item.title} x ${item.quantity} - $${(item.price * item.quantity).toFixed(2)}</li>
-            `).join('');
-            cartTotal.textContent = '$' + cart.reduce((total, item) => total + item.price * item.quantity, 0).toFixed(2);
-        }
+				optionsHTML += `
+                    <div class="option">
+                    <label>Quantity</label>
+                    <select onchange="updateProductQuantity('${product.id}', this.value)">
+                        ${[1, 2, 3, 4, 5, 6]
+													.map(num => `<option value="${num}">${num}</option>`)
+													.join('')}
+                    </select>
+                    </div>
+                `;
 
-        function proceedToCheckout() {
-            document.getElementById('checkout-form').style.display = 'block';
-        }
+				return optionsHTML;
+			}
+			function updateProductSelection(productId, optionName, value) {
+				if (!selectedOptions[productId]) {
+					selectedOptions[productId] = {};
+				}
+				selectedOptions[productId][optionName] = value;
+			}
 
-        document.getElementById('address-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const address = {
-                name: document.getElementById('name').value,
-                address1: document.getElementById('address1').value,
-                city: document.getElementById('city').value,
-                province: document.getElementById('province').value,
-                country: document.getElementById('country').value,
-                zip: document.getElementById('zip').value,
-                phone: document.getElementById('phone').value
-            };
+			function updateProductQuantity(productId, quantity) {
+				if (!selectedOptions[productId]) {
+					selectedOptions[productId] = {};
+				}
+				selectedOptions[productId].quantity = parseInt(quantity);
+			}
 
-            const items = cart.map(item => ({
-                variant_id: item.id,
-                quantity: item.quantity
-            }));
+			function addToCart(productId) {
+				console.log('Adding to cart, product ID:', productId);
+				console.log(
+					'Available products:',
+					products.map(p => ({ id: p.id, title: p.title })),
+				);
 
-            try {
-                const response = await fetch('/api/create-checkout', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ shop, items, address })
-                });
-                const data = await response.json();
-                window.location.href = data.checkoutUrl;
-            } catch (error) {
-                console.error('Error creating checkout:', error);
-                alert('Error creating checkout. Please try again.');
-            }
-        });
+				const product = products.find(p => p.id.toString() === productId.toString());
+				if (!product) {
+					console.error('Product not found:', productId);
+					return;
+				}
 
-        fetchProducts();
-    </script>
-</body>
+				console.log('Found product:', product);
+
+				const options = selectedOptions[productId] || {};
+				const variant = findVariant(product, options);
+
+				if (variant) {
+					cart.push({
+						id: variant.id,
+						title: product.title,
+						price: parseFloat(variant.price),
+						quantity: options.quantity || 1,
+						options: options,
+					});
+					updateCartDisplay();
+				} else {
+					alert('Please select all required options');
+				}
+			}
+
+			function findVariant(product, selectedOptions) {
+				return product.variants.find(variant =>
+					Object.entries(selectedOptions).every(
+						([optionName, optionValue]) =>
+							optionName === 'quantity' || variant[optionName] === optionValue,
+					),
+				);
+			}
+
+			function updateCartDisplay() {
+				const cartList = document.getElementById('cart-items');
+				const cartTotal = document.getElementById('cart-total');
+				cartList.innerHTML = cart
+					.map(
+						item => `
+                <li>${item.title} x ${item.quantity} - $${(item.price * item.quantity).toFixed(
+							2,
+						)}</li>
+            `,
+					)
+					.join('');
+				cartTotal.textContent =
+					'$' + cart.reduce((total, item) => total + item.price * item.quantity, 0).toFixed(2);
+			}
+
+			function getElementValueSafely(id) {
+				const element = document.getElementById(id);
+				return element ? element.value : '';
+			}
+
+			async function proceedToCheckout() {
+				document.getElementById('checkout-form').style.display = 'block';
+				document.getElementById('address-form').onsubmit = async function (e) {
+					e.preventDefault();
+
+					const addressData = {
+						firstName: getElementValueSafely('firstName'),
+						lastName: getElementValueSafely('lastName'),
+						address1: getElementValueSafely('address1'),
+						city: getElementValueSafely('city'),
+						province: getElementValueSafely('province'),
+						country: document.getElementById('country').value,
+						zip: document.getElementById('zip').value,
+						phone: document.getElementById('phone').value,
+					};
+
+					try {
+						const items = cart.map(item => ({
+							variantId: item.id,
+							quantity: item.quantity,
+						}));
+
+						const response = await fetch('/create-checkout-permalink', {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json',
+							},
+							body: JSON.stringify({ shop, items, address: addressData }),
+						});
+						const data = await response.json();
+
+						if (data.checkoutUrl) {
+							window.location.href = data.checkoutUrl;
+						} else {
+							throw new Error('Checkout URL not received');
+						}
+					} catch (error) {
+						console.error('Error creating checkout permalink:', error);
+						alert('Error creating checkout. Please try again.');
+					}
+				};
+			}
+			fetchProducts();
+		</script>
+	</body>
 </html>
